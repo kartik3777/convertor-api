@@ -1,87 +1,71 @@
 const express = require('express');
 const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
 const PDFDocument = require('pdfkit');
 const pdfParse = require('pdf-parse');
-const cors = require('cors'); // Importing CORS
+const cors = require('cors');
 
 const app = express();
-const port = 5000;
+const port = process.env.PORT || 5000;
 
+// Enable CORS for all routes
 app.use(cors());
 
-// Configure multer for file upload
-const upload2 = multer({ dest: 'uploads2/' });
-
-
-app.get('/testing', (req, res) => {
-    res.send("true");
-})
 app.get('/', (req, res) => {
-    res.send('<p> api working </p>');
+  res.send('<p> working </p>');
 })
 
-app.post('/convert-to-text', upload2.single('file'), (req, res) => {
-    const file = req.file;
-    const filePath = path.join(__dirname, file.path);
-  
-    // Read the PDF file
-    fs.readFile(filePath, (err, data) => {
-      if (err) return res.status(500).send('Error reading file');
-      
-      // Parse PDF to extract text
-      pdfParse(data).then(result => {
-        const txtFilePath = path.join(__dirname, 'uploads2', file.filename + '.txt');
-        
-        // Write the extracted text to a .txt file
-        fs.writeFile(txtFilePath, result.text, (err) => {
-          if (err) return res.status(500).send('Error saving txt file');
-          
-          res.sendFile(txtFilePath); // send the .txt file back to the client
-        });
-      }).catch(err => res.status(500).send('Error converting PDF'));
+// Use memory storage for multer
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
+// Route to upload and convert PDF to TXT
+app.post('/convert-to-txt', upload.single('file'), (req, res) => {
+  const file = req.file;
+
+  if (!file) {
+    return res.status(400).send('No file uploaded.');
+  }
+
+  // Use pdf-parse to extract text from the PDF
+  pdfParse(file.buffer)
+    .then(data => {
+      res.setHeader('Content-Type', 'text/plain');
+      res.send(data.text); // Send extracted text as response
+    })
+    .catch(err => {
+      res.status(500).send('Error processing PDF: ' + err.message);
     });
-  });
-
-
-  const upload = multer({ dest: 'uploads/' });
+});
 
 // Route to upload and convert TXT to PDF
 app.post('/convert-to-pdf', upload.single('file'), (req, res) => {
   const file = req.file;
-  const filePath = path.join(__dirname, file.path);
 
-  // Read the TXT file
-  fs.readFile(filePath, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Error reading file');
+  if (!file) {
+    return res.status(400).send('No file uploaded.');
+  }
 
-    // Create a new PDF document
-    const doc = new PDFDocument();
-    const pdfFilePath = path.join(__dirname, 'uploads', file.filename + '.pdf');
-    const pdfStream = fs.createWriteStream(pdfFilePath);
+  // Convert the uploaded file buffer to a string
+  const textContent = file.buffer.toString('utf8');
 
-    // Pipe the PDF document to the stream
-    doc.pipe(pdfStream);
+  // Create a new PDF document
+  const doc = new PDFDocument();
+  let chunks = [];
+  let pdfStream = doc.on('data', (chunk) => chunks.push(chunk))
+                     .on('end', () => {
+                       const pdfBuffer = Buffer.concat(chunks);
+                       res.setHeader('Content-Type', 'application/pdf');
+                       res.send(pdfBuffer);
+                     });
 
-    // Add the text content to the PDF
-    doc.text(data);
+  // Add the text content to the PDF
+  doc.text(textContent);
 
-    // Finalize the PDF and end the stream
-    doc.end();
-
-    // When the PDF stream is finished, send the PDF file to the client
-    pdfStream.on('finish', () => {
-      res.sendFile(pdfFilePath);
-    });
-
-    // Handle errors in the PDF generation process
-    pdfStream.on('error', (error) => {
-      return res.status(500).send('Error creating PDF');
-    });
-  });
+  // Finalize the PDF and end the stream
+  doc.end();
 });
 
+// Start the server
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
