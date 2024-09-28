@@ -3,6 +3,13 @@ const multer = require('multer');
 const PDFDocument = require('pdfkit');
 const pdfParse = require('pdf-parse');
 const cors = require('cors');
+// const { PDFDocument } = require('pdf-lib');
+const { createCanvas } = require('canvas');
+const fs = require('fs');
+const path = require('path');
+const archiver = require('archiver');
+const poppler = require('pdf-poppler');
+
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -14,9 +21,87 @@ app.get('/', (req, res) => {
   res.send('<p> working </p>');
 })
 
+app.use(express.json());
+
 // Use memory storage for multer
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+
+// Route to convert PDF to images
+app.post('/convert-pdf-to-images', upload.single('pdf'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded.' });
+    }
+
+    const pdfBuffer = req.file.buffer;
+    const pdfPath = path.join(__dirname, 'uploaded.pdf');
+
+    // Write the PDF buffer to a file
+    fs.writeFileSync(pdfPath, pdfBuffer);
+
+    const outputDir = path.join(__dirname, 'pdf-images');
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir);
+    }
+
+    // Convert the PDF to images using pdf-poppler
+    const options = {
+      format: 'png',
+      out_dir: outputDir,
+      out_prefix: 'page',
+      page: null // Convert all pages
+    };
+
+    await poppler.convert(pdfPath, options);
+
+    // Get the list of images created
+    const images = fs.readdirSync(outputDir).map((fileName) => ({
+      filename: fileName,
+      url: `https://convertor-api.vercel.app/images/${fileName}`
+    }));
+
+    res.json({ images });
+  } catch (error) {
+    console.error('Error converting PDF:', error);
+    res.status(500).send('Error converting PDF');
+  } finally {
+    // Clean up the uploaded PDF file
+    const pdfPath = path.join(__dirname, 'uploaded.pdf');
+    if (fs.existsSync(pdfPath)) {
+      fs.unlinkSync(pdfPath);
+    }
+  }
+});
+
+// Route to download images as a zip file
+app.post('/download-zip', (req, res) => {
+  const { images } = req.body;
+
+  if (!images || images.length === 0) {
+    return res.status(400).json({ message: 'No images to zip.' });
+  }
+
+  const archive = archiver('zip');
+  res.attachment('images.zip');
+
+  archive.on('error', (err) => {
+    res.status(500).send({ error: err.message });
+  });
+
+  archive.pipe(res);
+
+  images.forEach((image) => {
+    const imgPath = path.join(__dirname, 'pdf-images', image.filename);
+    archive.file(imgPath, { name: image.filename });
+  });
+
+  archive.finalize();
+});
+
+// Serve images statically
+app.use('/images', express.static(path.join(__dirname, 'pdf-images')));
+
 
 // Route to upload images and convert them to PDF
 app.post('/convert-images-to-pdf', upload.array('images', 10), (req, res) => {
