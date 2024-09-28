@@ -15,7 +15,11 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // Enable CORS for all routes
-app.use(cors());
+// app.use(cors());
+app.use(cors({
+  origin: 'https://convertor-frontend.vercel.app',
+  methods: 'GET,POST',
+}));
 
 app.get('/', (req, res) => {
   res.send('<p> working </p>');
