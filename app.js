@@ -12,15 +12,21 @@ const poppler = require('pdf-poppler');
 
 
 const app = express();
+
+const allowedOrigins = ['https://convertor-frontend.vercel.app', 'http://localhost:3000'];
+
 const corsOptions = {
-  origin: 'https://convertor-frontend.vercel.app',
+  origin: function (origin, callback) {
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type'],
   credentials: true
 };
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
 
 const port = process.env.PORT || 5000;
 
