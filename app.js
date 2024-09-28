@@ -12,14 +12,24 @@ const poppler = require('pdf-poppler');
 
 
 const app = express();
+const corsOptions = {
+  origin: 'https://convertor-frontend.vercel.app',
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type'],
+  credentials: true
+};
+
+// Apply CORS middleware
+app.use(cors(corsOptions));
+
 const port = process.env.PORT || 5000;
 
 // Enable CORS for all routes
 // app.use(cors());
-app.use(cors({
-  origin: 'https://convertor-frontend.vercel.app',
-  methods: 'GET,POST',
-}));
+// app.use(cors({
+//   origin: 'https://convertor-frontend.vercel.app',
+//   methods: 'GET,POST',
+// }));
 
 app.get('/', (req, res) => {
   res.send('<p> working </p>');
